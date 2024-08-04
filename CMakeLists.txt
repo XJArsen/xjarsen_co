@@ -5,9 +5,7 @@ project(co_web VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 
 # 设置构建类型为 Debug
-set(CMAKE_BUILD_TYPE Debug) 
-# 设置构建类型为 Release
-# set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 # 添加头文件路径
 include_directories(${CMAKE_SOURCE_DIR}/co)
@@ -19,4 +17,4 @@ file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
 # 添加可执行文件并包含源文件
-add_executable(co_web main.cpp)
+add_executable(co_web main.cpp co/epoll_loop.cpp)

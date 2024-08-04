@@ -1,45 +1,59 @@
-#include <iostream>
+#include "co/epoll_loop.hpp"
+#include "co/sleep_loop.hpp"
 #include "co/task.hpp"
 #include "debug.hpp"
-#include "co/sleep_loop.hpp"
-#include "co/when_any.hpp"
+#include <coroutine>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 using namespace co;
 using namespace std::chrono_literals;
 
-TimerLoop &getTimerLoop() {
-    static TimerLoop loop;
-    return loop;
-}
-Task<void, SleepUntilPromise> hello1() {
-    debug(), "hello1开始睡1秒";
-    co_await sleep_for(getTimerLoop(), 1s); 
-    debug(), "hello1睡醒了";
-    co_return ;
+co::EpollLoop epollLoop;
+co::TimerLoop timerLoop;
+
+co::Task<std::string> read_string(co::AsyncFile &file) {
+    co_await wait_file_event(epollLoop, file, EPOLLIN);
+    std::string s;
+    size_t chunk = 8;
+    while (true) {
+        char c;
+        std::size_t exist = s.size();
+        s.resize(exist + chunk);
+        std::span<char> buffer(s.data() + exist, chunk);
+        auto len = readFileSync(file, buffer);
+        if (len != chunk) {
+            s.resize(exist + len);
+            break;
+        }
+        if (chunk < 65536) {
+            chunk *= 4;
+        }
+    }
+    co_return s;
 }
 
-Task<void, SleepUntilPromise> hello2() {
-    debug(), "hello2开始睡2秒";
-    co_await sleep_for(getTimerLoop(), 2s); 
-    debug(), "hello2睡醒了";
-    co_return ;
+co::Task<void> async_main() {
+    co::AsyncFile file(STDIN_FILENO);
+    while (true) {
+        auto s = co_await read_string(file);
+        debug(), "读到了", s;
+        if (s == "quit\n") {
+            break;
+        }
+    }
 }
-
-Task<void, SleepUntilPromise> hello() {
-    debug(), "hello开始等1和2";
-    auto v = co_await when_any(hello1(), hello2());
-    /* co_await hello1(); */
-    /* co_await hello2(); */
-    debug(), "hello看到", (int)v.index() + 1, "睡醒了";
-    // co_return std::get<0>(v);
-}
-
 
 int main() {
-    std::cout << "Hello, from co_web!\n";
-    auto t = hello();
-    getTimerLoop().run();
-    debug(), "debug";
-    debug(), "主函数中得到hello结果:", t.mCoroutine.promise().result();
+    int attr = 1;
+    ioctl(0, FIONBIO, &attr);
+
+    auto t = async_main();
+    t.mCoroutine.resume();
+    while (!t.mCoroutine.done()) {
+        auto timeout = timerLoop.run();
+        epollLoop.run(timeout);
+    }
     return 0;
 }

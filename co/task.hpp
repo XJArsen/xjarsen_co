@@ -87,6 +87,14 @@ struct Task {
     Task(std::coroutine_handle<promise_type> coroutine) noexcept
         : mCoroutine(coroutine) {}
 
+    Task(Task &&that) noexcept : mCoroutine(that.mCoroutine) {
+        that.mCoroutine = nullptr;
+    }
+
+    Task &operator=(Task &&that) noexcept {
+        std::swap(mCoroutine, that.mCoroutine);
+    }
+
     ~Task() {
         mCoroutine.destroy();
     }
