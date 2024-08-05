@@ -1,7 +1,7 @@
 #pragma 
 
 #include <coroutine>
-#include "previous_awaiter.hpp"
+#include "co/awaiter/details/previous_awaiter.hpp"
 
 namespace co {
 

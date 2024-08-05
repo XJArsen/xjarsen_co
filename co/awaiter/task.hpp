@@ -1,14 +1,10 @@
 #pragma once
 
-#include <coroutine>
-
+#include "co/awaiter/details/previous_awaiter.hpp"
+#include "co/utils/uninitialized.hpp"
 #include <exception>
-#include "uninitialized.hpp"
-#include "previous_awaiter.hpp"
-
 
 namespace co {
-
 
 template <class T>
 struct Promise {
@@ -129,7 +125,6 @@ struct Task {
     std::coroutine_handle<promise_type> mCoroutine;
 };
 
-
 template <class Loop, class T, class P>
 T run_task(Loop &loop, Task<T, P> const &t) {
     auto a = t.operator co_await();
@@ -138,4 +133,4 @@ T run_task(Loop &loop, Task<T, P> const &t) {
     return a.await_resume();
 };
 
-}
+} // namespace co

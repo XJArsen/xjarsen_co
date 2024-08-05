@@ -5,10 +5,10 @@
 #include <exception>
 #include <vector>
 #include <variant>
-#include "uninitialized.hpp"
-#include "task.hpp"
-#include "return_previous.hpp"
-#include "concepts.hpp"
+#include "co/utils/uninitialized.hpp"
+#include "co/awaiter/task.hpp"
+#include "co/awaiter/details/return_previous.hpp"
+#include "co/awaiter/concepts.hpp"
 
 
 namespace co {

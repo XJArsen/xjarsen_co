@@ -1,15 +1,11 @@
 #pragma once
 
-#include "concepts.hpp"
-#include "return_previous.hpp"
-#include "task.hpp"
-#include "uninitialized.hpp"
-#include <coroutine>
-#include <exception>
-#include <span>
-#include <tuple>
-#include <type_traits>
-#include <vector>
+#include "co/awaiter/concepts.hpp"
+#include "co/awaiter/details/return_previous.hpp"
+#include "co/awaiter/task.hpp"
+#include "co/utils/uninitialized.hpp"
+#include "co/std.hpp"
+
 
 namespace co {
 struct WhenAllCtlBlock {
