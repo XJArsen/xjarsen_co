@@ -133,7 +133,7 @@ void SocketAddress::trySetPort(int port) {
     }
 }
 
-String SocketAddress::toString() const {
+std::string SocketAddress::toString() const {
     return host() + ':' + to_string(port());
 }
 

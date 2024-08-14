@@ -1,5 +1,6 @@
 #pragma once
 #include <co/std.hpp>
+#include "co/utils/string_utils.hpp"
 #include <arpa/inet.h>
 #include <co/awaiter/task.hpp>
 #include <co/generic/cancel.hpp>
@@ -7,7 +8,6 @@
 #include <co/platform/fs.hpp>
 #include <co/platform/platform_io.hpp>
 #include <co/utils/finally.hpp>
-#include <co/utils/string_utils.hpp>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -18,23 +18,6 @@
 
 namespace co {
 std::error_category const &getAddrInfoCategory();
-
-// struct IpAddress {
-//     explicit IpAddress(struct in_addr const &addr) noexcept : mAddr(addr) {}
-//
-//     explicit IpAddress(struct in6_addr const &addr6) noexcept : mAddr(addr6)
-//     {}
-//
-//     static Expected<IpAddress> fromString(char const *host);
-//
-//     String toString() const;
-//
-//     auto repr() const {
-//         return toString();
-//     }
-//
-//     std::variant<struct in_addr, struct in6_addr> mAddr;
-// };
 
 struct SocketAddress {
     SocketAddress() = default;
@@ -65,7 +48,7 @@ struct SocketAddress {
 
     void trySetPort(int port);
 
-    String toString() const;
+    std::string toString() const;
 
     auto repr() const {
         return toString();
