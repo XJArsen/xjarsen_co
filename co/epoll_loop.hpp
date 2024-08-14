@@ -1,35 +1,32 @@
 #pragma once
 
-#include <coroutine>
-#include <chrono>
-#include <cstdint>
-#include <utility>
-#include <optional>
-#include <string_view>
-#include <span>
+#include <co/std.hpp>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
-#include "awaiter/task.hpp"
+#include "co/awaiter/task.hpp"
 #include "co/platform/error_handle.hpp"
 
 namespace co {
 
 using EpollEventMask = std::uint32_t;
 
-struct EpollFilePromise : Promise<uint32_t> {
+struct EpollFilePromise : Promise<EpollEventMask> {
     auto get_return_object() {
         return std::coroutine_handle<EpollFilePromise>::from_promise(*this);
     }
 
+    EpollFilePromise &operator=(EpollFilePromise &&) = delete;
+
     inline ~EpollFilePromise();
 
-    struct EpollFileAwaiter *mAwaiter;
+    struct EpollFileAwaiter *mAwaiter{};
 };
 
 struct EpollLoop {
-    bool addListener(EpollFilePromise &promise, int ctl);
-    void removeListener(int fileNo);
-    bool run(std::optional<std::chrono::system_clock::duration> timeout);
+    inline bool addListener(EpollFilePromise &promise, int ctl);
+    inline void removeListener(int fileNo);
+    inline bool run(std::optional<std::chrono::system_clock::duration> timeout =
+                        std::nullopt);
 
     bool hasEvent() const noexcept {
         return mCount != 0;
@@ -54,19 +51,20 @@ struct EpollFileAwaiter {
     void await_suspend(std::coroutine_handle<EpollFilePromise> coroutine) {
         auto &promise = coroutine.promise();
         promise.mAwaiter = this;
-        mLoop.addListener(promise, mCtlCode);
+        if (!mLoop.addListener(promise, mCtlCode)) {
+            promise.mAwaiter = nullptr;
+            coroutine.resume();
+        }
     }
 
-    uint32_t await_resume() const noexcept {
+    EpollEventMask await_resume() const noexcept {
         return mResumeEvents;
     }
 
-    using ClockType = std::chrono::system_clock;
-
     EpollLoop &mLoop;
     int mFileNo;
-    uint32_t mEvents;
-    uint32_t mResumeEvents;
+    EpollEventMask mEvents;
+    EpollEventMask mResumeEvents;
     int mCtlCode = EPOLL_CTL_ADD;
 };
 
@@ -76,9 +74,51 @@ EpollFilePromise::~EpollFilePromise() {
     }
 }
 
+bool EpollLoop::addListener(EpollFilePromise &promise, int ctl) {
+    struct epoll_event event;
+    event.events = promise.mAwaiter->mEvents;
+    event.data.ptr = &promise;
+    int res = epoll_ctl(mEpoll, ctl, promise.mAwaiter->mFileNo, &event);
+    if (res == -1)
+        return false;
+    if (ctl == EPOLL_CTL_ADD)
+        ++mCount;
+    return true;
+}
 
-struct AsyncFile {
-    AsyncFile() : mFileNo(-1) {};
+void EpollLoop::removeListener(int fileNo) {
+    checkError(epoll_ctl(mEpoll, EPOLL_CTL_DEL, fileNo, NULL));
+    --mCount;
+}
+
+bool EpollLoop::run(
+    std::optional<std::chrono::system_clock::duration> timeout) {
+    if (mCount == 0) {
+        return false;
+    }
+    int timeoutInMs = -1;
+    if (timeout) {
+        timeoutInMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(*timeout)
+                .count();
+    }
+    int res = checkError(
+        epoll_wait(mEpoll, mEventBuf, std::size(mEventBuf), timeoutInMs));
+    for (int i = 0; i < res; i++) {
+        auto &event = mEventBuf[i];
+        auto &promise = *(EpollFilePromise *)event.data.ptr;
+        promise.mAwaiter->mResumeEvents = event.events;
+    }
+    for (int i = 0; i < res; i++) {
+        auto &event = mEventBuf[i];
+        auto &promise = *(EpollFilePromise *)event.data.ptr;
+        std::coroutine_handle<EpollFilePromise>::from_promise(promise).resume();
+    }
+    return true;
+}
+
+struct [[nodiscard]] AsyncFile {
+    AsyncFile() : mFileNo(-1) {}
 
     explicit AsyncFile(int fileNo) noexcept : mFileNo(fileNo) {}
 
@@ -92,9 +132,8 @@ struct AsyncFile {
     }
 
     ~AsyncFile() {
-        if (mFileNo != -1) {
+        if (mFileNo != -1)
             close(mFileNo);
-        }
     }
 
     int fileNo() const noexcept {

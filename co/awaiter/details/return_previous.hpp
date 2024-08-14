@@ -1,10 +1,8 @@
-#pragma 
-
-#include <coroutine>
-#include "co/awaiter/details/previous_awaiter.hpp"
+#pragma once
+#include <co/std.hpp>
+#include <co/awaiter/task.hpp>
 
 namespace co {
-
 struct ReturnPreviousPromise {
     auto initial_suspend() noexcept {
         return std::suspend_always();
@@ -27,22 +25,9 @@ struct ReturnPreviousPromise {
             *this);
     }
 
-    std::coroutine_handle<> mPrevious{};
+    std::coroutine_handle<> mPrevious;
+    ReturnPreviousPromise &operator=(ReturnPreviousPromise &&) = delete;
 };
 
-struct [[nodiscard]] ReturnPreviousTask {
-    using promise_type = ReturnPreviousPromise;
-
-    ReturnPreviousTask(std::coroutine_handle<promise_type> coroutine) noexcept
-        : mCoroutine(coroutine) {}
-
-    ReturnPreviousTask(ReturnPreviousTask &&) = delete;
-
-    ~ReturnPreviousTask() {
-        mCoroutine.destroy();
-    }
-
-    std::coroutine_handle<promise_type> mCoroutine;
-};
-
-}
+using ReturnPreviousTask = Task<void, ReturnPreviousPromise>;
+} // namespace co

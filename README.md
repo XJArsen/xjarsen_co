@@ -9,5 +9,5 @@
 ## Reference
 
 [@yunwei37](https://github.com/yunwei37/co-uring-WebServer/tree/master)
-[@archibate](https://github.com/archibate/co_async)
+[@archibate](https://github.com/archibate/co)
 [@Caturra000](https://github.com/Caturra000/io_uring-examples-cpp)

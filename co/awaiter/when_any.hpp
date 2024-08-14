@@ -52,7 +52,7 @@ ReturnPreviousTask whenAnyHelper(auto &&t, WhenAnyCtlBlock &control,
                                  Uninitialized<T> &result, std::size_t index) {
     try {
         result.putValue(
-            (co_await std::forward<decltype(t)>(t), NonVoidHelper<>()));
+            (co_await std::forward<decltype(t)>(t), Void<>()));
     } catch (...) {
         control.mException = std::current_exception();
         co_return control.mPrevious;

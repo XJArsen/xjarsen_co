@@ -1,16 +1,15 @@
 #pragma once
-
-#include "co/awaiter/concepts.hpp"
-#include "co/awaiter/details/return_previous.hpp"
-#include "co/awaiter/task.hpp"
-#include "co/utils/uninitialized.hpp"
-#include "co/std.hpp"
-
+#include <co/std.hpp>
+#include <co/awaiter/concepts.hpp>
+#include <co/awaiter/details/return_previous.hpp>
+#include <co/awaiter/task.hpp>
+#include <co/utils/uninitialized.hpp>
 
 namespace co {
 struct WhenAllCtlBlock {
     std::size_t mCount;
     std::coroutine_handle<> mPrevious{};
+
     std::exception_ptr mException{};
 };
 
@@ -26,9 +25,9 @@ struct WhenAllAwaiter {
         }
         mControl.mPrevious = coroutine;
         for (auto const &t: mTasks.subspan(0, mTasks.size() - 1)) {
-            t.mCoroutine.resume();
+            t.get().resume();
         }
-        return mTasks.front().mCoroutine;
+        return mTasks.back().get();
     }
 
     void await_resume() const {
@@ -45,12 +44,13 @@ template <class T>
 ReturnPreviousTask whenAllHelper(auto &&t, WhenAllCtlBlock &control,
                                  Uninitialized<T> &result) {
     try {
-        result.putValue(co_await std::forward<decltype(t)>(t));
+        result.emplace(co_await std::forward<decltype(t)>(t));
     } catch (...) {
         control.mException = std::current_exception();
         co_return control.mPrevious;
     }
-    if (--control.mCount == 0) {
+    --control.mCount;
+    if (control.mCount == 0) {
         co_return control.mPrevious;
     }
     co_return std::noop_coroutine();
@@ -65,22 +65,23 @@ ReturnPreviousTask whenAllHelper(auto &&t, WhenAllCtlBlock &control,
         control.mException = std::current_exception();
         co_return control.mPrevious;
     }
-    if (--control.mCount == 0) {
+    --control.mCount;
+    if (control.mCount == 0) {
         co_return control.mPrevious;
     }
     co_return std::noop_coroutine();
 }
 
 template <std::size_t... Is, class... Ts>
-Task<std::tuple<typename AwaitableTraits<Ts>::NonVoidRetType...>>
+Task<std::tuple<typename AwaitableTraits<Ts>::AvoidRetType...>>
 whenAllImpl(std::index_sequence<Is...>, Ts &&...ts) {
     WhenAllCtlBlock control{sizeof...(Ts)};
     std::tuple<Uninitialized<typename AwaitableTraits<Ts>::RetType>...> result;
     ReturnPreviousTask taskArray[]{
         whenAllHelper(ts, control, std::get<Is>(result))...};
     co_await WhenAllAwaiter(control, taskArray);
-    co_return std::tuple<typename AwaitableTraits<Ts>::NonVoidRetType...>(
-        std::get<Is>(result).moveValue()...);
+    co_return std::tuple<typename AwaitableTraits<Ts>::AvoidRetType...>(
+        std::get<Is>(result).move()...);
 }
 
 template <Awaitable... Ts>
@@ -92,29 +93,40 @@ auto when_all(Ts &&...ts) {
 
 template <Awaitable T, class Alloc = std::allocator<T>>
 Task<std::conditional_t<
-    std::same_as<void, typename AwaitableTraits<T>::RetType>,
-    std::vector<typename AwaitableTraits<T>::RetType, Alloc>, void>>
+    !std::is_void_v<typename AwaitableTraits<T>::RetType>,
+    std::vector<typename AwaitableTraits<T>::RetType,
+                typename std::allocator_traits<Alloc>::template rebind_alloc<
+                    typename AwaitableTraits<T>::RetType>>,
+    void>>
 when_all(std::vector<T, Alloc> const &tasks) {
     WhenAllCtlBlock control{tasks.size()};
     Alloc alloc = tasks.get_allocator();
-    std::vector<Uninitialized<typename AwaitableTraits<T>::RetType>, Alloc>
+    std::vector<Uninitialized<typename AwaitableTraits<T>::RetType>,
+                typename std::allocator_traits<Alloc>::template rebind_alloc<
+                    Uninitialized<typename AwaitableTraits<T>::RetType>>>
         result(tasks.size(), alloc);
     {
-        std::vector<ReturnPreviousTask, Alloc> taskArray(alloc);
+        std::vector<ReturnPreviousTask,
+                    typename std::allocator_traits<
+                        Alloc>::template rebind_alloc<ReturnPreviousTask>>
+            taskArray(alloc);
         taskArray.reserve(tasks.size());
         for (std::size_t i = 0; i < tasks.size(); ++i) {
             taskArray.push_back(whenAllHelper(tasks[i], control, result[i]));
         }
         co_await WhenAllAwaiter(control, taskArray);
     }
-    if constexpr (!std::same_as<void, typename AwaitableTraits<T>::RetType>) {
-        std::vector<typename AwaitableTraits<T>::RetType, Alloc> res(alloc);
+    if constexpr (!std::is_void_v<typename AwaitableTraits<T>::RetType>) {
+        std::vector<
+            typename AwaitableTraits<T>::RetType,
+            typename std::allocator_traits<Alloc>::template rebind_alloc<
+                typename AwaitableTraits<T>::RetType>>
+            res(alloc);
         res.reserve(tasks.size());
         for (auto &r: result) {
-            res.push_back(r.moveValue());
+            res.push_back(r.move());
         }
         co_return res;
     }
 }
-
 } // namespace co
